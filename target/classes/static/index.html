@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel导入Oracle工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0066cc;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], 
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="file"] {
+            padding: 5px 0;
+        }
+        button {
+            background-color: #0066cc;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0055aa;
+        }
+        .mapping-row {
+            display: flex;
+            margin-bottom: 5px;
+        }
+        .mapping-row input {
+            flex: 1;
+            margin-right: 5px;
+        }
+        .mapping-row button {
+            padding: 5px 10px;
+            background-color: #dc3545;
+        }
+        #add-mapping {
+            background-color: #28a745;
+            margin-top: 5px;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow: auto;
+        }
+        #loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        .progress {
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            margin-top: 5px;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #0066cc;
+            border-radius: 10px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Excel导入Oracle工具</h1>
+        
+        <div style="margin-bottom: 20px;">
+            <button id="test-connection" type="button" style="background-color: #6c757d;">测试API连接</button>
+            <span id="connection-status"></span>
+        </div>
+        
+        <form id="import-form">
+            <div class="form-group">
+                <label for="file">选择Excel文件:</label>
+                <input type="file" id="file" name="file" accept=".xls,.xlsx" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="tableName">目标表名:</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="tableName" name="tableName" required style="flex: 1;">
+                    <button type="button" id="fetch-structure" style="background-color: #6c757d;">获取表结构</button>
+                </div>
+                <div id="table-status" style="margin-top: 5px; font-size: 0.9em;"></div>
+            </div>
+            
+            <div id="table-structure-container" style="display: none; margin-bottom: 15px;">
+                <h3>表结构信息</h3>
+                <div class="table-responsive">
+                    <table class="table" style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+                        <thead>
+                            <tr style="background-color: #f2f2f2;">
+                                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">列名</th>
+                                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">数据类型</th>
+                                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">是否必填</th>
+                                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">主键</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-columns">
+                            <!-- 表结构数据将在这里动态显示 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="sheetName">工作表名 (可选，默认使用第一个工作表):</label>
+                <input type="text" id="sheetName" name="sheetName">
+            </div>
+            
+            <div class="form-group">
+                <label for="headerRowNum">表头行号 (从0开始):</label>
+                <input type="number" id="headerRowNum" name="headerRowNum" value="0" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="dataStartRowNum">数据起始行号 (从0开始):</label>
+                <input type="number" id="dataStartRowNum" name="dataStartRowNum" value="1" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label for="autoMapping">映射方式:</label>
+                <select id="autoMapping" name="autoMapping">
+                    <option value="true" selected>自动映射 (Excel列名直接作为数据库字段名)</option>
+                    <option value="false">手动映射 (自定义Excel列名与数据库字段的对应关系)</option>
+                </select>
+            </div>
+            
+            <div class="form-group" id="mappingGroup">
+                <label>列映射 (Excel列名 -> 数据库字段名):</label>
+                <div id="mappings"></div>
+                <button type="button" id="add-mapping">添加映射</button>
+            </div>
+            
+            <!-- 添加额外字段区域 -->
+            <div class="form-group" id="extraFieldsGroup">
+                <label>额外字段 (Excel中不存在的字段):</label>
+                <div id="extraFields"></div>
+                <button type="button" id="add-extra-field">添加额外字段</button>
+            </div>
+            
+            <div class="form-group">
+                <label for="requiredColumns">必填列 (用逗号分隔):</label>
+                <input type="text" id="requiredColumns" name="requiredColumns">
+            </div>
+            
+            <div class="form-group">
+                <label for="batchSize">批处理大小:</label>
+                <input type="number" id="batchSize" name="batchSize" value="1000" min="1">
+            </div>
+            
+            <div class="form-group">
+                <label>操作类型:</label>
+                <select id="isInsert" name="isInsert">
+                    <option value="true">插入</option>
+                    <option value="false">更新</option>
+                </select>
+            </div>
+            
+            <div class="form-group" id="keyColumnsGroup" style="display: none;">
+                <label for="keyColumns">唯一键列 (用于更新, 用逗号分隔):</label>
+                <input type="text" id="keyColumns" name="keyColumns">
+            </div>
+            
+            <div class="form-group">
+                <label for="ignoreErrors">错误处理:</label>
+                <select id="ignoreErrors" name="ignoreErrors">
+                    <option value="true">忽略错误继续处理</option>
+                    <option value="false">遇到错误停止处理</option>
+                </select>
+            </div>
+            
+            <button type="submit">导入数据</button>
+        </form>
+        
+        <div id="loading">
+            <p>正在处理，请稍候...</p>
+            <div class="progress">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+        </div>
+        
+        <div id="result">
+            <h3>处理结果</h3>
+            <pre id="result-data"></pre>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('页面加载完成');
+            
+            // 添加初始映射行
+            addMappingRow();
+            
+            document.getElementById('headerRowNum').addEventListener('change', updateDataStartRowNum);
+            document.getElementById('isInsert').addEventListener('change', toggleKeyColumns);
+            document.getElementById('autoMapping').addEventListener('change', toggleMappingGroup);
+            document.getElementById('fetch-structure').addEventListener('click', fetchTableStructure);
+            document.getElementById('add-mapping').addEventListener('click', function() {
+                addMappingRow();
+            });
+            document.getElementById('add-extra-field').addEventListener('click', function() {
+                addExtraFieldRow();
+            });
+            
+            // 初始化显示/隐藏状态
+            toggleKeyColumns();
+            toggleMappingGroup();
+            
+            document.getElementById('file').addEventListener('change', function(e) {
+                document.getElementById('filename').textContent = e.target.files[0].name;
+            });
+            
+            // 表单提交事件
+            document.getElementById('import-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                submitForm();
+            });
+            
+            // 测试连接按钮点击事件
+            document.getElementById('test-connection').addEventListener('click', function() {
+                const statusSpan = document.getElementById('connection-status');
+                statusSpan.textContent = '测试中...';
+                statusSpan.style.color = '#0066cc';
+                
+                console.log('测试API连接...');
+                fetch('/api/excel/health')
+                    .then(response => {
+                        console.log('收到健康检查响应:', response.status, response.statusText);
+                        if (response.ok) {
+                            statusSpan.textContent = '连接成功!';
+                            statusSpan.style.color = 'green';
+                        } else {
+                            statusSpan.textContent = '连接失败: ' + response.status;
+                            statusSpan.style.color = 'red';
+                        }
+                        return response.text();
+                    })
+                    .then(text => {
+                        console.log('响应内容:', text);
+                    })
+                    .catch(error => {
+                        console.error('连接测试失败:', error);
+                        statusSpan.textContent = '连接失败: ' + error.message;
+                        statusSpan.style.color = 'red';
+                    });
+            });
+            
+            // 表名输入框失去焦点时获取表结构
+            document.getElementById('tableName').addEventListener('blur', function() {
+                if (this.value) {
+                    fetchTableStructure();
+                }
+            });
+        });
+        
+        // 更新数据起始行
+        function updateDataStartRowNum() {
+            // 默认将数据起始行设置为表头行+1
+            const headerRowNum = parseInt(document.getElementById('headerRowNum').value, 10);
+            document.getElementById('dataStartRowNum').value = headerRowNum + 1;
+        }
+        
+        // 切换唯一键字段显示状态
+        function toggleKeyColumns() {
+            const keyColumnsGroup = document.getElementById('keyColumnsGroup');
+            const isInsert = document.getElementById('isInsert').value;
+            
+            if (isInsert === 'false') {
+                keyColumnsGroup.style.display = 'block';
+            } else {
+                keyColumnsGroup.style.display = 'none';
+            }
+        }
+        
+        // 切换映射组显示状态
+        function toggleMappingGroup() {
+            const mappingGroup = document.getElementById('mappingGroup');
+            const extraFieldsGroup = document.getElementById('extraFieldsGroup');
+            const isManualMapping = document.getElementById('autoMapping').value === 'false';
+            
+            if (isManualMapping) {
+                // 手动映射模式，显示手动映射选项和额外字段选项
+                mappingGroup.style.display = 'block';
+                extraFieldsGroup.style.display = 'block';
+                updateMappingFieldsRequired(true);
+            } else {
+                // 自动映射模式，隐藏手动映射选项和额外字段选项
+                mappingGroup.style.display = 'none';
+                extraFieldsGroup.style.display = 'none';
+                updateMappingFieldsRequired(false);
+            }
+            
+            console.log(`映射模式已切换为: ${isManualMapping ? '手动映射' : '自动映射'}`);
+        }
+        
+        // 获取表结构
+        function fetchTableStructure() {
+            const tableName = document.getElementById('tableName').value.trim();
+            const tableStatus = document.getElementById('table-status');
+            const tableStructureContainer = document.getElementById('table-structure-container');
+            const tableColumns = document.getElementById('table-columns');
+            
+            if (!tableName) {
+                tableStatus.textContent = '请输入表名';
+                tableStatus.style.color = 'red';
+                tableStructureContainer.style.display = 'none';
+                return;
+            }
+            
+            tableStatus.textContent = '获取表结构中...';
+            tableStatus.style.color = '#0066cc';
+            
+            console.log('获取表结构:', tableName);
+            fetch(`/api/table/structure/${tableName}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('获取表结构失败: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('表结构:', data);
+                    
+                    if (data.exists) {
+                        // 显示表结构信息
+                        tableStatus.textContent = `表 ${tableName} 存在，共 ${data.columns.length} 列`;
+                        tableStatus.style.color = 'green';
+                        tableStructureContainer.style.display = 'block';
+                        
+                        // 清空表格
+                        tableColumns.innerHTML = '';
+                        
+                        // 填充表结构数据
+                        data.columns.forEach(column => {
+                            const row = document.createElement('tr');
+                            
+                            // 列名
+                            const nameCell = document.createElement('td');
+                            nameCell.style.padding = '8px';
+                            nameCell.style.border = '1px solid #ddd';
+                            nameCell.textContent = column.columnName;
+                            if (!column.nullable && column.defaultValue === null) {
+                                nameCell.style.fontWeight = 'bold';
+                            }
+                            row.appendChild(nameCell);
+                            
+                            // 数据类型
+                            const typeCell = document.createElement('td');
+                            typeCell.style.padding = '8px';
+                            typeCell.style.border = '1px solid #ddd';
+                            typeCell.textContent = `${column.typeName}${column.columnSize > 0 ? '(' + column.columnSize + ')' : ''}`;
+                            row.appendChild(typeCell);
+                            
+                            // 是否必填
+                            const nullableCell = document.createElement('td');
+                            nullableCell.style.padding = '8px';
+                            nullableCell.style.border = '1px solid #ddd';
+                            nullableCell.textContent = !column.nullable ? '是' : '否';
+                            nullableCell.style.color = !column.nullable ? 'red' : 'inherit';
+                            row.appendChild(nullableCell);
+                            
+                            // 是否主键
+                            const pkCell = document.createElement('td');
+                            pkCell.style.padding = '8px';
+                            pkCell.style.border = '1px solid #ddd';
+                            pkCell.textContent = column.primaryKey ? '是' : '否';
+                            pkCell.style.color = column.primaryKey ? 'blue' : 'inherit';
+                            row.appendChild(pkCell);
+                            
+                            tableColumns.appendChild(row);
+                        });
+                        
+                        // 更新必填列
+                        const requiredColumns = data.columns
+                            .filter(col => !col.nullable && col.defaultValue === null)
+                            .map(col => col.columnName);
+                        
+                        if (requiredColumns.length > 0) {
+                            document.getElementById('requiredColumns').value = requiredColumns.join(',');
+                        }
+                        
+                        // 如果是更新操作，默认使用主键作为唯一键
+                        if (document.getElementById('isInsert').value === 'false') {
+                            const primaryKeys = data.columns
+                                .filter(col => col.primaryKey)
+                                .map(col => col.columnName);
+                            
+                            if (primaryKeys.length > 0) {
+                                document.getElementById('keyColumns').value = primaryKeys.join(',');
+                            }
+                        }
+                        
+                        // 更新手动映射的下拉选项
+                        updateMappingDropdowns(data.columns);
+                    } else {
+                        // 表不存在
+                        tableStatus.textContent = data.message || `表 ${tableName} 不存在`;
+                        tableStatus.style.color = 'red';
+                        tableStructureContainer.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('获取表结构失败:', error);
+                    tableStatus.textContent = error.message;
+                    tableStatus.style.color = 'red';
+                    tableStructureContainer.style.display = 'none';
+                });
+        }
+        
+        // 更新手动映射下拉选项
+        function updateMappingDropdowns(columns) {
+            // 这里可以实现当选择手动映射时，显示数据库字段的下拉选择框
+            // 当前实现暂时保留文本输入框
+        }
+        
+        // 添加初始映射行
+        function addMappingRow() {
+            const mappingsDiv = document.getElementById('mappings');
+            const row = document.createElement('div');
+            row.className = 'mapping-row';
+            
+            // 创建容器，用于放置Excel列名输入框
+            const excelColContainer = document.createElement('div');
+            excelColContainer.style.flex = '1';
+            
+            const excelColumn = document.createElement('input');
+            excelColumn.type = 'text';
+            excelColumn.placeholder = 'Excel列名';
+            excelColumn.name = 'excelColumn';
+            excelColContainer.appendChild(excelColumn);
+            
+            // 创建容器，用于放置数据库字段选择器和相关控件
+            const dbColContainer = document.createElement('div');
+            dbColContainer.style.flex = '2';
+            dbColContainer.style.display = 'flex';
+            dbColContainer.style.flexDirection = 'column';
+            dbColContainer.style.gap = '5px';
+            
+            // 使用下拉菜单代替输入框
+            const dbColumn = document.createElement('select');
+            dbColumn.name = 'dbColumn';
+            dbColumn.style.width = '100%';
+            
+            // 添加默认选项
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = '-- 选择数据库字段 --';
+            defaultOption.selected = true;
+            defaultOption.disabled = true;
+            dbColumn.appendChild(defaultOption);
+            
+            // 如果已获取表结构，添加表字段选项
+            const tableStructureContainer = document.getElementById('table-structure-container');
+            if (tableStructureContainer.style.display !== 'none') {
+                // 获取表格中的所有列
+                const tableRows = document.querySelectorAll('#table-columns tr');
+                tableRows.forEach(row => {
+                    const columnName = row.cells[0].textContent;
+                    const option = document.createElement('option');
+                    option.value = columnName;
+                    option.textContent = columnName;
+                    
+                    // 如果是必填字段，标记出来
+                    if (row.cells[2].textContent === '是') {
+                        option.textContent += ' (必填)';
+                        option.style.fontWeight = 'bold';
+                    }
+                    
+                    // 如果是主键，标记出来
+                    if (row.cells[3].textContent === '是') {
+                        option.textContent += ' (主键)';
+                        option.style.color = 'blue';
+                        option.dataset.isPrimary = 'true'; // 添加数据属性，标记为主键
+                    }
+                    
+                    dbColumn.appendChild(option);
+                });
+            }
+            
+            // 创建值生成方式选择器
+            const valueSourceContainer = document.createElement('div');
+            valueSourceContainer.style.display = 'flex';
+            valueSourceContainer.style.alignItems = 'center';
+            valueSourceContainer.style.gap = '10px';
+            
+            const valueSourceLabel = document.createElement('label');
+            valueSourceLabel.textContent = '值来源:';
+            valueSourceLabel.style.fontSize = '0.9em';
+            valueSourceLabel.style.minWidth = '60px';
+            
+            const valueSource = document.createElement('select');
+            valueSource.name = 'valueSource';
+            valueSource.style.flex = '1';
+            
+            // 添加值来源选项
+            const fromExcelOption = document.createElement('option');
+            fromExcelOption.value = 'excel';
+            fromExcelOption.textContent = 'Excel数据';
+            fromExcelOption.selected = true;
+            
+            const defaultValueOption = document.createElement('option');
+            defaultValueOption.value = 'default';
+            defaultValueOption.textContent = '默认值';
+            
+            const generatorOption = document.createElement('option');
+            generatorOption.value = 'generator';
+            generatorOption.textContent = '自动生成';
+            
+            valueSource.appendChild(fromExcelOption);
+            valueSource.appendChild(defaultValueOption);
+            valueSource.appendChild(generatorOption);
+            
+            valueSourceContainer.appendChild(valueSourceLabel);
+            valueSourceContainer.appendChild(valueSource);
+            
+            // 创建默认值输入框（初始隐藏）
+            const defaultValueContainer = document.createElement('div');
+            defaultValueContainer.style.display = 'none';
+            defaultValueContainer.style.alignItems = 'center';
+            defaultValueContainer.style.gap = '10px';
+            
+            const defaultValueLabel = document.createElement('label');
+            defaultValueLabel.textContent = '默认值:';
+            defaultValueLabel.style.fontSize = '0.9em';
+            defaultValueLabel.style.minWidth = '60px';
+            
+            const defaultValue = document.createElement('input');
+            defaultValue.type = 'text';
+            defaultValue.name = 'defaultValue';
+            defaultValue.placeholder = '输入默认值';
+            defaultValue.style.flex = '1';
+            
+            defaultValueContainer.appendChild(defaultValueLabel);
+            defaultValueContainer.appendChild(defaultValue);
+            
+            // 创建生成器选择器（初始隐藏）
+            const generatorContainer = document.createElement('div');
+            generatorContainer.style.display = 'none';
+            generatorContainer.style.alignItems = 'center';
+            generatorContainer.style.gap = '10px';
+            
+            const generatorLabel = document.createElement('label');
+            generatorLabel.textContent = '生成器:';
+            generatorLabel.style.fontSize = '0.9em';
+            generatorLabel.style.minWidth = '60px';
+            
+            const generator = document.createElement('select');
+            generator.name = 'generator';
+            generator.style.flex = '1';
+            
+            // 添加一个加载选项
+            const loadingOption = document.createElement('option');
+            loadingOption.value = '';
+            loadingOption.textContent = '加载中...';
+            loadingOption.selected = true;
+            loadingOption.disabled = true;
+            generator.appendChild(loadingOption);
+            
+            generatorContainer.appendChild(generatorLabel);
+            generatorContainer.appendChild(generator);
+            
+            // 将所有子组件添加到dbColContainer
+            dbColContainer.appendChild(dbColumn);
+            dbColContainer.appendChild(valueSourceContainer);
+            dbColContainer.appendChild(defaultValueContainer);
+            dbColContainer.appendChild(generatorContainer);
+            
+            // 创建删除按钮
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.textContent = 'X';
+            removeBtn.style.alignSelf = 'center';
+            removeBtn.addEventListener('click', function() {
+                mappingsDiv.removeChild(row);
+            });
+            
+            // 设置行布局和样式
+            row.style.display = 'flex';
+            row.style.flexDirection = 'row';
+            row.style.gap = '10px';
+            row.style.marginBottom = '10px';
+            
+            // 将所有组件添加到行
+            row.appendChild(excelColContainer);
+            row.appendChild(dbColContainer);
+            row.appendChild(removeBtn);
+            
+            // 添加行到容器
+            mappingsDiv.appendChild(row);
+            
+            // 值来源变化事件，显示/隐藏对应的控件
+            valueSource.addEventListener('change', function() {
+                // 隐藏所有额外控件
+                defaultValueContainer.style.display = 'none';
+                generatorContainer.style.display = 'none';
+                
+                // 根据选择显示对应控件
+                if (this.value === 'default') {
+                    defaultValueContainer.style.display = 'flex';
+                } else if (this.value === 'generator') {
+                    generatorContainer.style.display = 'flex';
+                    
+                    // 如果还没加载过生成器列表，加载它
+                    if (generator.querySelector('option:not([disabled])') === null) {
+                        fetchGenerators(generator);
+                    }
+                }
+            });
+            
+            // 数据库字段选择变更事件
+            dbColumn.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                
+                // 如果选择的是主键字段，默认选择自动生成值
+                if (selectedOption && selectedOption.dataset.isPrimary === 'true') {
+                    valueSource.value = 'generator';
+                    valueSource.dispatchEvent(new Event('change'));
+                    
+                    // 确保生成器列表被加载，并且会自动选择雪花算法
+                    if (generator.querySelector('option:not([disabled])') === null) {
+                        fetchGenerators(generator);
+                    }
+                }
+            });
+            
+            // 根据当前的映射模式设置是否必填
+            const isManualMapping = document.getElementById('autoMapping').value === 'false';
+            if (isManualMapping) {
+                excelColumn.required = true;
+                dbColumn.required = true;
+            }
+            
+            return row;
+        }
+        
+        // 获取生成器列表
+        function fetchGenerators(selectElement) {
+            console.log('获取值生成器列表...');
+            
+            fetch('/api/table/generators')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('获取生成器列表失败: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(generators => {
+                    console.log('生成器列表:', generators);
+                    
+                    // 清空现有选项
+                    while (selectElement.options.length > 0) {
+                        selectElement.remove(0);
+                    }
+                    
+                    // 添加默认选项
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = '-- 选择生成器 --';
+                    defaultOption.selected = true;
+                    defaultOption.disabled = true;
+                    selectElement.appendChild(defaultOption);
+                    
+                    // 添加生成器选项
+                    generators.forEach(generator => {
+                        const option = document.createElement('option');
+                        option.value = generator.id;
+                        option.textContent = generator.name;
+                        option.title = generator.description;
+                        selectElement.appendChild(option);
+                        
+                        // 如果是雪花算法，标记数据属性
+                        if (generator.id === 'snowflake') {
+                            option.dataset.isSnowflake = 'true';
+                        }
+                    });
+                    
+                    // 确定是否需要默认选择雪花算法
+                    // 首先确定是常规映射字段还是额外字段
+                    let isExtraField = selectElement.name === 'extraGenerator';
+                    let parentRow, dbColumnSelect, selectedOption;
+                    
+                    if (isExtraField) {
+                        parentRow = selectElement.closest('.extra-field-row');
+                        dbColumnSelect = parentRow.querySelector('select[name="extraDbColumn"]');
+                    } else {
+                        parentRow = selectElement.closest('.mapping-row');
+                        dbColumnSelect = parentRow.querySelector('select[name="dbColumn"]');
+                    }
+                    
+                    selectedOption = dbColumnSelect.options[dbColumnSelect.selectedIndex];
+                    
+                    // 如果选择的是主键字段，默认选择雪花算法
+                    if (selectedOption && selectedOption.dataset.isPrimary === 'true') {
+                        // 查找雪花算法选项
+                        for (let i = 0; i < selectElement.options.length; i++) {
+                            if (selectElement.options[i].dataset.isSnowflake === 'true') {
+                                selectElement.selectedIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('获取生成器列表失败:', error);
+                    
+                    // 显示错误选项
+                    while (selectElement.options.length > 0) {
+                        selectElement.remove(0);
+                    }
+                    
+                    const errorOption = document.createElement('option');
+                    errorOption.value = '';
+                    errorOption.textContent = '加载失败，请重试';
+                    errorOption.selected = true;
+                    errorOption.disabled = true;
+                    selectElement.appendChild(errorOption);
+                });
+        }
+        
+        // 更新映射字段的required属性
+        function updateMappingFieldsRequired(isRequired) {
+            // 获取所有映射字段
+            const excelColumns = document.querySelectorAll('input[name="excelColumn"]');
+            const dbColumns = document.querySelectorAll('input[name="dbColumn"]');
+            
+            // 更新required属性
+            excelColumns.forEach(input => {
+                input.required = isRequired;
+            });
+            
+            dbColumns.forEach(input => {
+                input.required = isRequired;
+            });
+            
+            console.log(`已将所有映射字段的required属性设置为${isRequired}`);
+        }
+        
+        // 添加额外字段行
+        function addExtraFieldRow() {
+            const extraFieldsDiv = document.getElementById('extraFields');
+            const row = document.createElement('div');
+            row.className = 'extra-field-row';
+            
+            // 创建容器，用于放置数据库字段选择器
+            const dbColContainer = document.createElement('div');
+            dbColContainer.style.flex = '1';
+            
+            // 使用下拉菜单选择数据库字段
+            const dbColumn = document.createElement('select');
+            dbColumn.name = 'extraDbColumn';
+            dbColumn.style.width = '100%';
+            
+            // 添加默认选项
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = '-- 选择数据库字段 --';
+            defaultOption.selected = true;
+            defaultOption.disabled = true;
+            dbColumn.appendChild(defaultOption);
+            
+            // 如果已获取表结构，添加表字段选项
+            const tableStructureContainer = document.getElementById('table-structure-container');
+            if (tableStructureContainer.style.display !== 'none') {
+                // 获取表格中的所有列
+                const tableRows = document.querySelectorAll('#table-columns tr');
+                tableRows.forEach(row => {
+                    const columnName = row.cells[0].textContent;
+                    const option = document.createElement('option');
+                    option.value = columnName;
+                    option.textContent = columnName;
+                    
+                    // 如果是必填字段，标记出来
+                    if (row.cells[2].textContent === '是') {
+                        option.textContent += ' (必填)';
+                        option.style.fontWeight = 'bold';
+                    }
+                    
+                    // 如果是主键，标记出来
+                    if (row.cells[3].textContent === '是') {
+                        option.textContent += ' (主键)';
+                        option.style.color = 'blue';
+                        option.dataset.isPrimary = 'true'; // 添加数据属性，标记为主键
+                    }
+                    
+                    dbColumn.appendChild(option);
+                });
+            }
+            
+            dbColContainer.appendChild(dbColumn);
+            
+            // 创建容器，用于放置值类型选择和对应输入框
+            const valueContainer = document.createElement('div');
+            valueContainer.style.flex = '2';
+            valueContainer.style.display = 'flex';
+            valueContainer.style.flexDirection = 'column';
+            valueContainer.style.gap = '5px';
+            
+            // 创建值类型选择器
+            const valueTypeContainer = document.createElement('div');
+            valueTypeContainer.style.display = 'flex';
+            valueTypeContainer.style.alignItems = 'center';
+            valueTypeContainer.style.gap = '10px';
+            
+            const valueTypeLabel = document.createElement('label');
+            valueTypeLabel.textContent = '值类型:';
+            valueTypeLabel.style.fontSize = '0.9em';
+            valueTypeLabel.style.minWidth = '60px';
+            
+            const valueType = document.createElement('select');
+            valueType.name = 'extraValueType';
+            valueType.style.flex = '1';
+            
+            // 添加值类型选项
+            const defaultValueOption = document.createElement('option');
+            defaultValueOption.value = 'default';
+            defaultValueOption.textContent = '默认值';
+            defaultValueOption.selected = true;
+            
+            const generatorOption = document.createElement('option');
+            generatorOption.value = 'generator';
+            generatorOption.textContent = '自动生成';
+            
+            valueType.appendChild(defaultValueOption);
+            valueType.appendChild(generatorOption);
+            
+            valueTypeContainer.appendChild(valueTypeLabel);
+            valueTypeContainer.appendChild(valueType);
+            
+            // 创建默认值输入框
+            const defaultValueContainer = document.createElement('div');
+            defaultValueContainer.style.display = 'flex';
+            defaultValueContainer.style.alignItems = 'center';
+            defaultValueContainer.style.gap = '10px';
+            
+            const defaultValueLabel = document.createElement('label');
+            defaultValueLabel.textContent = '默认值:';
+            defaultValueLabel.style.fontSize = '0.9em';
+            defaultValueLabel.style.minWidth = '60px';
+            
+            const defaultValue = document.createElement('input');
+            defaultValue.type = 'text';
+            defaultValue.name = 'extraDefaultValue';
+            defaultValue.placeholder = '输入默认值';
+            defaultValue.style.flex = '1';
+            
+            defaultValueContainer.appendChild(defaultValueLabel);
+            defaultValueContainer.appendChild(defaultValue);
+            
+            // 创建生成器选择器（初始隐藏）
+            const generatorContainer = document.createElement('div');
+            generatorContainer.style.display = 'none';
+            generatorContainer.style.alignItems = 'center';
+            generatorContainer.style.gap = '10px';
+            
+            const generatorLabel = document.createElement('label');
+            generatorLabel.textContent = '生成器:';
+            generatorLabel.style.fontSize = '0.9em';
+            generatorLabel.style.minWidth = '60px';
+            
+            const generator = document.createElement('select');
+            generator.name = 'extraGenerator';
+            generator.style.flex = '1';
+            
+            // 添加一个加载选项
+            const loadingOption = document.createElement('option');
+            loadingOption.value = '';
+            loadingOption.textContent = '加载中...';
+            loadingOption.selected = true;
+            loadingOption.disabled = true;
+            generator.appendChild(loadingOption);
+            
+            generatorContainer.appendChild(generatorLabel);
+            generatorContainer.appendChild(generator);
+            
+            // 将所有子组件添加到valueContainer
+            valueContainer.appendChild(valueTypeContainer);
+            valueContainer.appendChild(defaultValueContainer);
+            valueContainer.appendChild(generatorContainer);
+            
+            // 创建删除按钮
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.textContent = 'X';
+            removeBtn.style.alignSelf = 'center';
+            removeBtn.addEventListener('click', function() {
+                extraFieldsDiv.removeChild(row);
+            });
+            
+            // 设置行布局和样式
+            row.style.display = 'flex';
+            row.style.flexDirection = 'row';
+            row.style.gap = '10px';
+            row.style.marginBottom = '10px';
+            
+            // 将所有组件添加到行
+            row.appendChild(dbColContainer);
+            row.appendChild(valueContainer);
+            row.appendChild(removeBtn);
+            
+            // 添加行到容器
+            extraFieldsDiv.appendChild(row);
+            
+            // 值类型变化事件，显示/隐藏对应的控件
+            valueType.addEventListener('change', function() {
+                // 根据选择显示对应控件
+                if (this.value === 'default') {
+                    defaultValueContainer.style.display = 'flex';
+                    generatorContainer.style.display = 'none';
+                } else if (this.value === 'generator') {
+                    defaultValueContainer.style.display = 'none';
+                    generatorContainer.style.display = 'flex';
+                    
+                    // 如果还没加载过生成器列表，立即加载它
+                    if (generator.querySelector('option:not([disabled])') === null || 
+                        generator.querySelector('option:not([disabled])').value === '') {
+                        fetchGenerators(generator);
+                    }
+                }
+            });
+            
+            // 数据库字段选择变更事件
+            dbColumn.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                
+                // 如果选择的是主键字段，默认选择自动生成值
+                if (selectedOption && selectedOption.dataset.isPrimary === 'true') {
+                    valueType.value = 'generator';
+                    valueType.dispatchEvent(new Event('change'));
+                    
+                    // 确保生成器列表被加载，并且会自动选择雪花算法
+                    if (generator.querySelector('option:not([disabled])') === null) {
+                        fetchGenerators(generator);
+                    }
+                }
+            });
+            
+            // 当前映射模式下，设置必填项
+            dbColumn.required = true;
+            
+            return row;
+        }
+        
+        // 提交表单
+        function submitForm() {
+            const form = document.getElementById('import-form');
+            const fileInput = document.getElementById('file');
+            
+            console.log('提交表单开始...');
+            
+            if (!fileInput.files[0]) {
+                alert('请选择Excel文件');
+                return;
+            }
+            
+            console.log('选中的文件:', fileInput.files[0].name);
+            
+            // 准备表单数据
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            // 添加基本字段
+            formData.append('tableName', document.getElementById('tableName').value);
+            formData.append('headerRowNum', document.getElementById('headerRowNum').value);
+            formData.append('dataStartRowNum', document.getElementById('dataStartRowNum').value);
+            formData.append('batchSize', document.getElementById('batchSize').value);
+            formData.append('isInsert', document.getElementById('isInsert').value);
+            formData.append('ignoreErrors', document.getElementById('ignoreErrors').value);
+            formData.append('autoMapping', document.getElementById('autoMapping').value);
+            
+            console.log('表单数据已准备:');
+            console.log('- 表名:', document.getElementById('tableName').value);
+            console.log('- 表头行号:', document.getElementById('headerRowNum').value);
+            console.log('- 数据起始行号:', document.getElementById('dataStartRowNum').value);
+            console.log('- 批处理大小:', document.getElementById('batchSize').value);
+            console.log('- 操作类型:', document.getElementById('isInsert').value === 'true' ? '插入' : '更新');
+            console.log('- 自动映射:', document.getElementById('autoMapping').value === 'true' ? '是' : '否');
+            
+            // 添加可选字段
+            const sheetName = document.getElementById('sheetName').value;
+            if (sheetName) {
+                formData.append('sheetName', sheetName);
+            }
+            
+            const requiredColumns = document.getElementById('requiredColumns').value;
+            if (requiredColumns) {
+                formData.append('requiredColumns', requiredColumns.split(','));
+            }
+            
+            if (document.getElementById('isInsert').value === 'false') {
+                const keyColumns = document.getElementById('keyColumns').value;
+                if (!keyColumns) {
+                    alert('更新操作必须指定唯一键列');
+                    return;
+                }
+                formData.append('keyColumns', keyColumns.split(','));
+            }
+            
+            // 添加列映射（仅在手动映射模式下）
+            const isManualMapping = document.getElementById('autoMapping').value === 'false';
+            
+            if (isManualMapping) {
+                console.log('正在处理手动映射字段...');
+                const mappingRows = document.querySelectorAll('.mapping-row');
+                let hasMapping = false;
+                
+                for (let i = 0; i < mappingRows.length; i++) {
+                    const row = mappingRows[i];
+                    const excelColumn = row.querySelector('input[name="excelColumn"]').value;
+                    const dbColumn = row.querySelector('select[name="dbColumn"]').value;
+                    
+                    if (excelColumn && dbColumn) {
+                        // 添加基本映射
+                        formData.append(`columnMapping[${excelColumn}]`, dbColumn);
+                        hasMapping = true;
+                        
+                        // 检查是否有值来源设置
+                        const valueSource = row.querySelector('select[name="valueSource"]')?.value;
+                        
+                        if (valueSource === 'default') {
+                            // 添加默认值设置
+                            const defaultValue = row.querySelector('input[name="defaultValue"]').value;
+                            if (defaultValue) {
+                                formData.append(`columnDefaultValue[${excelColumn}]`, defaultValue);
+                                console.log(`- 列 ${excelColumn} 设置默认值:`, defaultValue);
+                            }
+                        } else if (valueSource === 'generator') {
+                            // 添加生成器设置
+                            const generator = row.querySelector('select[name="generator"]').value;
+                            if (generator) {
+                                formData.append(`columnGenerator[${excelColumn}]`, generator);
+                                console.log(`- 列 ${excelColumn} 使用生成器:`, generator);
+                            }
+                        }
+                    }
+                }
+                
+                // 处理额外字段
+                console.log('正在处理额外字段...');
+                const extraFieldRows = document.querySelectorAll('.extra-field-row');
+                
+                for (let i = 0; i < extraFieldRows.length; i++) {
+                    const row = extraFieldRows[i];
+                    const dbColumn = row.querySelector('select[name="extraDbColumn"]').value;
+                    
+                    if (dbColumn) {
+                        // 检查值类型
+                        const valueType = row.querySelector('select[name="extraValueType"]').value;
+                        
+                        if (valueType === 'default') {
+                            // 添加默认值设置
+                            const defaultValue = row.querySelector('input[name="extraDefaultValue"]').value;
+                            if (defaultValue) {
+                                formData.append(`extraFields[${dbColumn}]`, defaultValue);
+                                console.log(`- 额外字段 ${dbColumn} 设置默认值:`, defaultValue);
+                            }
+                        } else if (valueType === 'generator') {
+                            // 添加生成器设置
+                            const generator = row.querySelector('select[name="extraGenerator"]').value;
+                            if (generator) {
+                                formData.append(`extraFieldGenerators[${dbColumn}]`, generator);
+                                console.log(`- 额外字段 ${dbColumn} 使用生成器:`, generator);
+                            }
+                        }
+                    }
+                }
+                
+                // 在手动映射模式下，确保至少有一个映射
+                if (!hasMapping) {
+                    alert('手动映射模式下，请至少添加一个列映射');
+                    return;
+                }
+            } else {
+                console.log('自动映射模式，跳过手动映射处理');
+            }
+            
+            // 显示加载状态
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            
+            // 更新进度条动画
+            const progressBar = document.getElementById('progress-bar');
+            progressBar.style.width = '0%';
+            
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                if (progress < 90) {
+                    progress += 5;
+                    progressBar.style.width = progress + '%';
+                }
+            }, 500);
+            
+            console.log('准备发送请求到:', window.location.origin + '/api/excel/import');
+            
+            // 发送请求
+            fetch('/api/excel/import', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                console.log('收到响应:', response.status, response.statusText);
+                if (!response.ok) {
+                    throw new Error('服务器响应错误: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // 停止进度条动画
+                clearInterval(progressInterval);
+                progressBar.style.width = '100%';
+                
+                // 隐藏加载状态
+                loading.style.display = 'none';
+                
+                // 显示结果
+                const resultDiv = document.getElementById('result');
+                resultDiv.style.display = 'block';
+                resultDiv.className = data.success ? 'success' : 'error';
+                
+                document.getElementById('result-data').textContent = JSON.stringify(data, null, 2);
+                
+                // 如果成功并且有任务ID，可以轮询任务状态
+                if (data.success && data.taskId) {
+                    checkTaskStatus(data.taskId);
+                }
+                console.log('处理结果:', data);
+            })
+            .catch(error => {
+                console.error('请求失败:', error);
+                // 停止进度条动画
+                clearInterval(progressInterval);
+                
+                // 隐藏加载状态
+                loading.style.display = 'none';
+                
+                // 显示错误
+                const resultDiv = document.getElementById('result');
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'error';
+                
+                document.getElementById('result-data').textContent = '请求出错: ' + error.message;
+            });
+        }
+        
+        // 检查任务状态
+        function checkTaskStatus(taskId) {
+            // 这里可以实现轮询任务状态的功能
+            console.log('任务ID: ' + taskId);
+        }
+    </script>
+</body>
+</html> 

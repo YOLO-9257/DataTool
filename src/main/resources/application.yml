@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: excel-to-oracle
+  datasource:
+    url: jdbc:oracle:thin:@localhost:1521:xxxx   #替换成自己真实的即可
+    username: xxxx
+    password: xxxx
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      auto-commit: false          # 手动控制事务
+      connection-timeout: 60000   # 连接超时时间，60秒
+      maximum-pool-size: 10       # 最大连接数
+      minimum-idle: 3             # 最小空闲连接数
+      idle-timeout: 600000        # 空闲连接超时时间，10分钟
+      max-lifetime: 1800000       # 连接最大生命周期，30分钟
+      connection-test-query: SELECT 1 FROM DUAL  # 连接测试查询
+      validation-timeout: 5000    # 连接验证超时
+      leak-detection-threshold: 30000  # 连接泄漏检测阈值
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false # 禁用自动运行，通过命令行或API触发
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 15MB
+      file-size-threshold: 2MB
+      location: ${java.io.tmpdir}
+  web:
+    resources:
+      static-locations: classpath:/static/
+
+logging:
+  level:
+    root: INFO
+    com.datatool.exceltooracle: DEBUG
+    org.springframework.web: DEBUG # 添加Web相关日志，帮助调试
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: never
+    include-exception: false
+
+excel-to-oracle:
+  batch:
+    chunk-size: 1000 # 批处理大小
+  temp-dir: ./temp # 临时文件目录 

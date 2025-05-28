@@ -10,80 +10,12 @@
 
 DataTool是一个灵活的数据导入工具，主要特性：
 
-- 支持多种数据库：MySQL、PostgreSQL、Oracle、SQL Server、SQLite、H2
-- 支持多种文件格式：Excel、CSV、JSON
+- 支持多种数据库：Oracle （目前支持这个后续可以不断添加）
+- 支持多种文件格式：Excel（目前支持这个后续可以不断添加）
 - 可扩展的数据处理管道
 - 自定义数据处理器
 - 数据转换和映射
 - 值生成器（ID、时间戳、UUID等）
-
-## 项目结构
-
-重构后的项目结构更加清晰：
-
-```
-com.datatool.newstructure/
-├── core/                  # 核心接口和类
-│   ├── DataSource.java    # 数据源接口
-│   ├── DataTarget.java    # 数据目标接口
-│   ├── DataProcessor.java # 数据处理器接口
-│   ├── ProcessContext.java # 处理上下文
-│   └── ValueGenerator.java # 值生成器接口
-├── db/                    # 数据库相关
-│   ├── DatabaseType.java  # 数据库类型枚举
-│   └── targets/           # 数据库目标实现
-├── file/                  # 文件相关
-│   ├── FileType.java      # 文件类型枚举
-│   ├── sources/           # 文件数据源实现
-│   └── targets/           # 文件数据目标实现
-├── pipeline/              # 数据处理管道
-│   ├── DataPipeline.java  # 数据处理管道
-│   └── PipelineListener.java # 管道监听器
-└── util/                  # 工具类
-```
-
-## 使用方法
-
-### 基本用法
-
-```java
-// 创建数据源
-DataSource<Row> source = new ExcelDataSource("data.xlsx", 0, true);
-
-// 创建数据目标
-DataTarget target = new MySqlDataTarget("jdbc:mysql://localhost:3306/mydb", "user", "password", "mytable");
-
-// 创建数据处理管道
-DataPipeline<Row, Map<String, Object>> pipeline = new DataPipeline<>(source, target);
-
-// 添加数据处理器
-pipeline.addProcessor(new RowToMapProcessor());
-
-// 执行数据处理
-PipelineResult result = pipeline.execute();
-```
-
-### 添加自定义处理器
-
-```java
-public class MyProcessor implements DataProcessor<Map<String, Object>, Map<String, Object>> {
-    @Override
-    public Map<String, Object> process(Map<String, Object> input, ProcessContext context) {
-        // 处理数据
-        return processedData;
-    }
-    
-    @Override
-    public String getName() {
-        return "MyProcessor";
-    }
-    
-    @Override
-    public String getDescription() {
-        return "我的自定义处理器";
-    }
-}
-```
 
 ## 开发环境
 
@@ -105,7 +37,7 @@ java -jar target/datatool-1.0.0.jar
 
 ## ✨ 核心特性
 
-- **多格式支持** - 完美兼容XLS、XLSX、CSV等多种Excel格式文件
+- **多格式支持** - 完美兼容XLS、XLSX等多种Excel格式文件
 - **灵活映射规则** - 允许用户自定义Excel列与数据库字段的映射关系
 - **智能类型转换** - 自动处理数据类型转换，无需手动调整格式
 - **批量导入能力** - 支持海量数据一次性导入，显著提升工作效率
@@ -119,7 +51,7 @@ java -jar target/datatool-1.0.0.jar
 ### 环境要求
 
 - Java 8+
-- 支持的数据库：MySQL、PostgreSQL、Oracle、SQL Server、SQLite
+- 支持的数据库：Oracle（目前支持这个后续可以不断添加）
 
 ### 安装方法
 
